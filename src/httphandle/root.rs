@@ -1,3 +1,3 @@
-pub async fn root() -> &'static str {
+pub async fn index() -> &'static str {
     "Hello, World!"
 }
