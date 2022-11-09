@@ -47,7 +47,6 @@ pub struct Post {
     pub created_at: i64,
     pub id: String,
     pub is_paid_content: bool,
-    pub paywall: Option<Paywall>,
     pub publication: Publication,
     pub title: String,
     pub updated_at: i64,
@@ -76,12 +75,6 @@ pub struct Publication {
     pub updated_at: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Paywall {
-    pub end_at: i64,
-    pub intro: String,
-    pub start_at: i64,
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Author {
@@ -107,4 +100,10 @@ pub struct SiteInfo {
     // name
     pub token: String,
     pub updated_at: i64,
+}
+
+impl SiteInfo {
+    pub fn url(&self) -> String {
+        String::from(format!("https://{}.zhubai.love", self.name))
+    }
 }
