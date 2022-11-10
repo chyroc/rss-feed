@@ -7,7 +7,7 @@ use crate::adapter::zhubai::user::Post;
 
 const SITE_NAME: &str = "竹白";
 
-pub async fn get_zhubai_user_rss(name: &str) -> Result<Channel, Box<dyn Error>> {
+pub async fn get_zhubai_user_posts_rss(name: &str) -> Result<Channel, Box<dyn Error>> {
     let site_info = match user::get_info(name).await {
         Ok(data) => data,
         Err(err) => return Err(err)

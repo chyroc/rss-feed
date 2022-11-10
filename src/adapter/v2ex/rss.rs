@@ -1,4 +1,5 @@
 use std::error::Error;
+
 use rss::{Channel, ChannelBuilder, GuidBuilder, Item, ItemBuilder};
 
 use crate::adapter::v2ex::all::{Feed, get_feeds};
@@ -25,6 +26,7 @@ pub async fn get_v2ex_all_rss() -> Result<Channel, Box<dyn Error>> {
                 .description(feed.content_rendered)
                 .guid(GuidBuilder::default().permalink(false).value(feed.url.to_string()).build())
                 .pub_date(feed.created.to_string())
+                .author(feed.member.username)
                 .build()
         ).collect::<Vec<Item>>())
         .build())

@@ -13,8 +13,9 @@ async fn main() {
 
     let app = Router::new()
         .route("/", get(httphandle::api_root::index))
-        .route("/feed/zhubai/:name", get(httphandle::api_zhubai::get_feed))
-        .route("/feed/v2ex/all", get(httphandle::api_v2ex::get_feed));
+        .route("/feed/zhubai/:name", get(httphandle::api_zhubai::get_user_posts))
+        .route("/feed/v2ex/all", get(httphandle::api_v2ex::get_all))
+        .route("/feed/gocn/daily", get(httphandle::api_gocn::get_daily));
 
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));

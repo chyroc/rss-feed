@@ -1,89 +1,114 @@
-pub async fn get_feed() {}
+use std::error::Error;
+use std::io::{Error as IOError, ErrorKind};
 
-// func New(map[string]string) (*fetch.Source, error) {
-// 	link := "https://gocn.vip/topics/cate/18"
-// 	return &fetch.Source{
-// 		Title:       "GoCN - 每日新闻",
-// 		Description: "GoCN - 每日新闻",
-// 		Link:        link,
-//
-// 		Fetch: func() (interface{}, error) {
-// 			// text, err := helper.Req.New(http.MethodGet, link).Text()
-// 			return nil, nil
-// 		},
-// 		Parse: func(obj interface{}) ([]*fetch.Item, error) {
-// 			resp := new(getListResp)
-// 			err := helper.Req.New(http.MethodGet, "https://gocn.vip/apiv3/topic/list?currentPage=1&cate2Id=18&grade=new").Unmarshal(resp)
-// 			if err != nil {
-// 				return nil, err
-// 			}
-//
-// 			items := []*fetch.Item{}
-// 			err = lambda.New(resp.Data.List).MapArrayAsync(func(idx int, v interface{}) interface{} {
-// 				item := v.(*item)
-// 				itemDetail := new(getItemDetailResp)
-// 				_ = helper.Req.New(http.MethodGet, fmt.Sprintf("https://gocn.vip/apiv3/topic/%s/info", item.GUID)).Unmarshal(itemDetail)
-// 				return &fetch.Item{
-// 					Title:       item.Title,
-// 					Link:        fmt.Sprintf("https://gocn.vip/topics/%s", item.GUID),
-// 					Description: itemDetail.Data.Topic.ContentHTML,
-// 					Author:      item.Nickname,
-// 				}
-// 			}).FilterList(func(idx int, obj interface{}) bool {
-// 				return obj != nil && obj.(*fetch.Item) != nil
-// 			}).ToObject(&items)
-// 			if err != nil {
-// 				return nil, err
-// 			}
-//
-// 			return items, nil
-// 		},
-// 	}, nil
-// }
-//
-// type getListResp struct {
-// 	Code int    `json:"code"`
-// 	Msg  string `json:"msg"`
-// 	Data struct {
-// 		List []*item `json:"list"`
-// 	} `json:"data"`
-// }
-//
-// type item struct {
-// 	GUID       string `json:"guid"`
-// 	UID        int    `json:"uid"`
-// 	Nickname   string `json:"nickname"`
-// 	Avatar     string `json:"avatar"`
-// 	Title      string `json:"title"`
-// 	Summary    string `json:"summary"`
-// 	Ctime      int    `json:"ctime"`
-// 	CntView    int    `json:"cntView"`
-// 	Cate2ID    int    `json:"cate2Id"`
-// 	Cate2Title string `json:"cate2Title"`
-// 	CntLike    int    `json:"cntLike,omitempty"`
-// 	CntCollect int    `json:"cntCollect,omitempty"`
-// }
-//
-// type getItemDetailResp struct {
-// 	Code int    `json:"code"`
-// 	Msg  string `json:"msg"`
-// 	Data struct {
-// 		Tdk struct {
-// 			Title       string `json:"title"`
-// 			Keywords    string `json:"keywords"`
-// 			Description string `json:"description"`
-// 		} `json:"tdk"`
-// 		Topic struct {
-// 			GUID        string `json:"guid"`
-// 			UID         int    `json:"uid"`
-// 			Nickname    string `json:"nickname"`
-// 			Avatar      string `json:"avatar"`
-// 			Title       string `json:"title"`
-// 			ContentHTML string `json:"contentHtml"`
-// 			Ctime       int    `json:"ctime"`
-// 			CntView     int    `json:"cntView"`
-// 			Cate2ID     int    `json:"cate2Id"`
-// 			Cate2Title  string `json:"cate2Title"`
-// 		} `json:"topic"`
-// 	} `json:"data"`
-// }
+use futures::future;
+use reqwest::header::USER_AGENT;
+use serde::{Deserialize, Serialize};
+
+pub async fn get_feed() -> Result<Vec<Post>, Box<dyn Error>> {
+    let url = "https://gocn.vip/apiv3/topic/list?currentPage=1&cate2Id=18&grade=new";
+    let client = reqwest::Client::new();
+    let resp = client
+        .get(url)
+        .header(USER_AGENT, "My Rust Program 1.0")
+        .send()
+        .await?.json::<GetListResp>().await?;
+    // println!("{}", resp);
+
+    // let resp = reqwest::get(url).await?.json::<GetListResp>().await?;
+    if resp.code != 0 {
+        return Err(Box::new(IOError::new(ErrorKind::Other, format!("gocn.vip api error: {}", resp.msg))));
+    }
+
+    let contents = future::join_all(resp.data.list.iter().map(|post: &Post| get_post_content(&post.guid))).await as Vec<String>;
+
+    let posts = resp.data.list.into_iter().enumerate().map(|(idx, post): (usize, Post)|
+        Post {
+            url: format!("https://gocn.vip/topics/{}", post.guid),
+            content: contents[idx].to_string(),
+            ..post
+        }
+    ).collect::<Vec<Post>>();
+
+    Ok(posts)
+}
+
+async fn get_post_content(guid: &str) -> String {
+    let url = format!("https://gocn.vip/apiv3/topic/{}/info", guid);
+    match reqwest::get(url).await {
+        Ok(resp) => {
+            match resp.json::<GetPostContentResp>().await {
+                Ok(resp) => resp.data.topic.content_html,
+                Err(_) => String::new()
+            }
+        }
+        Err(_) => String::new()
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Pagination {
+    pub total: i64,
+    #[serde(rename = "currentPage")]
+    pub current_page: i64,
+    #[serde(rename = "pageSize")]
+    pub page_size: i64,
+    pub sort: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Post {
+    pub guid: String,
+    pub uid: i64,
+    pub nickname: String,
+    pub avatar: String,
+    pub title: String,
+    pub summary: Option<String>,
+    pub ctime: i64,
+    #[serde(rename = "cntView")]
+    pub cnt_view: i64,
+    #[serde(rename = "cate2Id")]
+    pub cate2id: i64,
+    #[serde(rename = "cate2Title")]
+    pub cate2title: String,
+    #[serde(rename = "cntReply")]
+    pub cnt_reply: Option<i64>,
+    #[serde(rename = "cntLike")]
+    pub cnt_like: Option<i64>,
+    #[serde(skip_deserializing)]
+    pub content: String,
+    #[serde(skip_deserializing)]
+    pub url: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct GetListRespData {
+    pub list: Vec<Post>,
+    pub pagination: Pagination,
+}
+
+#[derive(Serialize, Deserialize)]
+struct GetListResp {
+    pub code: i64,
+    pub msg: String,
+    pub data: GetListRespData,
+}
+
+
+#[derive(Serialize, Deserialize)]
+struct GetPostContentRespDataTopic {
+    #[serde(rename = "contentHtml")]
+    pub content_html: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct GetPostContentRespData {
+    pub topic: GetPostContentRespDataTopic,
+}
+
+#[derive(Serialize, Deserialize)]
+struct GetPostContentResp {
+    pub code: i64,
+    pub msg: String,
+    pub data: GetPostContentRespData,
+}
