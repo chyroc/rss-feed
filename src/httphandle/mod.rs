@@ -1,4 +1,4 @@
 pub mod resp;
-pub mod root;
-pub mod zhubai;
-pub mod v2ex;
+pub mod api_root;
+pub mod api_zhubai;
+pub mod api_v2ex;
